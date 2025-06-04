@@ -123,19 +123,28 @@ if uploaded_file:
                 st.warning("Certaines adresses n'ont pas pu être géocodées :")
                 st.dataframe(df_echec[[col_adresse, col_entreprise]])
 
-            #Nom fichier
-            original_name = os.path.splitext(uploaded_file.name)[0]
-            final_filename = f"{original_name}-complet.xlsx"
+            # Supprimer la colonne "Source géocodage"
+            if "Source géocodage" in df.columns:
+                df = df.drop(columns=["Source géocodage"])
 
-            output = BytesIO()
-            df.to_excel(output, index=False)
-            output.seek(0)
+            # Forcer le format des colonnes de date sans heure
+            colonnes_date = ["Date début", "Date fin"]
+            for col in colonnes_date:
+                if col in df.columns:
+                    df[col] = pd.to_datetime(df[col], errors='coerce').dt.strftime("%Y-%m-%d")
+
+            # Nom du fichier CSV
+            original_name = os.path.splitext(uploaded_file.name)[0]
+            final_filename = f"{original_name}.csv"
+
+            # Conversion en CSV
+            csv_data = df.to_csv(index=False).encode("utf-8")
 
             st.download_button(
-                label="Télécharger le fichier Excel complété",
-                data=output,
+                label="Télécharger le fichier CSV complété",
+                data=csv_data,
                 file_name=final_filename,
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                mime="text/csv"
             )
 
     except Exception as e:
