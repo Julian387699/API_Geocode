@@ -133,18 +133,18 @@ if uploaded_file:
                 if col in df.columns:
                     df[col] = pd.to_datetime(df[col], errors='coerce').dt.strftime("%Y-%m-%d")
 
-            # Nom du fichier CSV
+            # Nom du fichier XLSX
             original_name = os.path.splitext(uploaded_file.name)[0]
-            final_filename = f"{original_name}.csv"
+            final_filename = f"{original_name}_complété.xlsx"
 
-            # Conversion en CSV
-            csv_data = df.to_csv(index=False).encode("utf-8")
+            # Conversion en XLSX
+            xlsx_data = df.to_xlsx(index=False).encode("utf-8")
 
             st.download_button(
-                label="Télécharger le fichier CSV complété",
-                data=csv_data,
+                label="Télécharger le fichier XLSX complété",
+                data=xlsx_data,
                 file_name=final_filename,
-                mime="text/csv"
+                mime="text/xlsx"
             )
 
     except Exception as e:
