@@ -17,7 +17,7 @@ uploaded_file = st.file_uploader("Importer un fichier Excel", type=[".xls", ".xl
 
 if uploaded_file:
     try:
-        df = pd.read_excel(uploaded_file)
+        df = pd.read_excel(uploaded_file, dtype=str)
         st.success("Fichier chargé avec succès")
 
         colonnes = df.columns.tolist()
@@ -137,14 +137,17 @@ if uploaded_file:
             original_name = os.path.splitext(uploaded_file.name)[0]
             final_filename = f"{original_name}_complété.xlsx"
 
-            # Conversion en XLSX
-            xlsx_data = df.to_xlsx(index=False).encode("utf-8")
+            # Conversion en XLSX via BytesIO
+            output = BytesIO()
+            with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+                df.to_excel(writer, index=False)
+            output.seek(0)
 
             st.download_button(
                 label="Télécharger le fichier XLSX complété",
-                data=xlsx_data,
+                data=output,
                 file_name=final_filename,
-                mime="text/xlsx"
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
 
     except Exception as e:
