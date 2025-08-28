@@ -7,7 +7,7 @@ from geopy.exc import GeocoderTimedOut, GeocoderUnavailable
 import os
 import requests
 
-#Clé LocationIQ
+# Clé LocationIQ
 LOCATIONIQ_API_KEY = "pk.f77db56ba31235d07e1a1d045dc501de"
 
 st.set_page_config(page_title="Géocodeur d'adresses", layout="centered")
@@ -27,22 +27,20 @@ if uploaded_file:
         if st.button("Lancer le géocodage"):
             geolocator = Nominatim(user_agent="streamlit_geocoder_colas")
 
-
+            # --- Nettoyage adresse ---
             def nettoyer_adresse(adresse):
                 if isinstance(adresse, str):
-                    # Supprimer les mentions inutiles
                     mots_a_supprimer = ["Internal Postal Box", "Bte", "Case postale", "(Biz)"]
                     for mot in mots_a_supprimer:
                         adresse = adresse.replace(mot, "")
-
-                    # Nettoyage standard
                     adresse = adresse.replace("B ", "").strip()
                     if not adresse.lower().endswith("belgique"):
                         adresse += ", Belgique"
                     return adresse
                 return ""
 
-            def geocode_nominatim(adresse, retries=3):
+            # --- Nominatim avec retries ---
+            def geocode_nominatim(adresse, retries=2):
                 try:
                     location = geolocator.geocode(adresse, timeout=10)
                     if location:
@@ -55,7 +53,7 @@ if uploaded_file:
                     st.write(f"Erreur Nominatim: {e}")
                 return None, None
 
-
+            # --- LocationIQ ---
             def geocode_locationiq(adresse):
                 try:
                     url = "https://eu1.locationiq.com/v1/search"
@@ -75,6 +73,17 @@ if uploaded_file:
                     pass
                 return None, None
 
+            # --- Cache pour éviter les doublons ---
+            @st.cache_data
+            def geocode_cache(adresse):
+                lat, lon = geocode_locationiq(adresse)
+                source = "LocationIQ"
+                if lat is None or lon is None:
+                    lat, lon = geocode_nominatim(adresse)
+                    source = "Nominatim" if lat and lon else "Échec"
+                return lat, lon, source
+
+            # --- Boucle principale ---
             latitudes, longitudes, adresses_finales, sources = [], [], [], []
             progress = st.progress(0)
             total = len(df)
@@ -83,26 +92,17 @@ if uploaded_file:
                 adresse_orig = str(df.at[i, col_adresse])
                 entreprise = str(df.at[i, col_entreprise]).strip()
                 st.write(f"Géocodage en cours ({i+1}/{total}) : {adresse_orig}")
-                source = "Nominatim"
 
-                adresse_nettoyee = nettoyer_adresse(adresse_orig)
-                lat, lon = geocode_nominatim(adresse_nettoyee)
-                adresse_utilisee = adresse_nettoyee
+                adresse_utilisee = nettoyer_adresse(adresse_orig)
+                lat, lon, source = geocode_cache(adresse_utilisee)
 
+                # Fallback sur entreprise si adresse échoue
                 if (lat is None or lon is None) and entreprise:
                     adresse_alt = nettoyer_adresse(entreprise)
-                    lat, lon = geocode_nominatim(adresse_alt)
+                    lat, lon, source = geocode_cache(adresse_alt)
                     if lat and lon:
                         adresse_utilisee = adresse_alt
-                        source = "Fallback entreprise"
-
-                if (lat is None or lon is None):
-                    lat, lon = geocode_locationiq(adresse_utilisee)
-                    if lat and lon:
-                        source = "LocationIQ"
-
-                if lat is None or lon is None:
-                    source = "Échec"
+                        source = f"Fallback entreprise ({source})"
 
                 adresses_finales.append(adresse_utilisee)
                 latitudes.append(lat)
@@ -110,14 +110,14 @@ if uploaded_file:
                 sources.append(source)
 
                 progress.progress((i + 1) / total)
-                time.sleep(1)
 
+            # --- Résultats ---
             df[col_adresse] = adresses_finales
             df["Latitude"] = latitudes
             df["Longitude"] = longitudes
             df["Source géocodage"] = sources
 
-            st.success("Géocodage terminé")
+            st.success("✅ Géocodage terminé")
             st.dataframe(df.head())
 
             # Affichage des échecs
@@ -126,28 +126,25 @@ if uploaded_file:
                 st.warning("Certaines adresses n'ont pas pu être géocodées :")
                 st.dataframe(df_echec[[col_adresse, col_entreprise]])
 
-            # Supprimer la colonne "Source géocodage"
-            if "Source géocodage" in df.columns:
-                df = df.drop(columns=["Source géocodage"])
+            # Nettoyage colonne source
+            df = df.drop(columns=["Source géocodage"], errors="ignore")
 
-            # Forcer le format des colonnes de date sans heure
+            # Formatage dates
             colonnes_date = ["Date début", "Date fin"]
             for col in colonnes_date:
                 if col in df.columns:
                     df[col] = pd.to_datetime(df[col], errors='coerce').dt.strftime("%Y-%m-%d")
 
-            # Nom du fichier XLSX
+            # Export XLSX
             original_name = os.path.splitext(uploaded_file.name)[0]
             final_filename = f"{original_name}_complété.xlsx"
-
-            # Conversion en XLSX via BytesIO
             output = BytesIO()
             with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
                 df.to_excel(writer, index=False)
             output.seek(0)
 
             st.download_button(
-                label="Télécharger le fichier XLSX complété",
+                label="📥 Télécharger le fichier XLSX complété",
                 data=output,
                 file_name=final_filename,
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
