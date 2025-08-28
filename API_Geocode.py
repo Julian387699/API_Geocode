@@ -42,17 +42,19 @@ if uploaded_file:
                     return adresse
                 return ""
 
-            def geocode_nominatim(adresse):
+            def geocode_nominatim(adresse, retries=3):
                 try:
                     location = geolocator.geocode(adresse, timeout=10)
                     if location:
                         return round(location.latitude, 6), round(location.longitude, 6)
                 except (GeocoderTimedOut, GeocoderUnavailable):
-                    time.sleep(1)
-                    return geocode_nominatim(adresse)
-                except:
-                    pass
+                    if retries > 0:
+                        time.sleep(1)
+                        return geocode_nominatim(adresse, retries-1)
+                except Exception as e:
+                    st.write(f"Erreur Nominatim: {e}")
                 return None, None
+
 
             def geocode_locationiq(adresse):
                 try:
@@ -80,6 +82,7 @@ if uploaded_file:
             for i in range(total):
                 adresse_orig = str(df.at[i, col_adresse])
                 entreprise = str(df.at[i, col_entreprise]).strip()
+                st.write(f"Géocodage en cours ({i+1}/{total}) : {adresse_orig}")
                 source = "Nominatim"
 
                 adresse_nettoyee = nettoyer_adresse(adresse_orig)
